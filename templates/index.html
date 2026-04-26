@@ -1,0 +1,1373 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            name="description"
+            content="表情包工坊 – 一键生成专属表情包套装"
+        />
+        <title>表情包工坊</title>
+        <link rel="stylesheet" href="/static/css/style.css" />
+    </head>
+    <body>
+        <!-- ══════════════════════════════════════════════════════
+       HEADER / NAV
+       ══════════════════════════════════════════════════════ -->
+        <header class="app-header">
+            <a class="app-logo" href="/">
+                <div class="app-logo-icon">🎨</div>
+                <span class="app-logo-text">表情包工坊</span>
+            </a>
+
+            <nav class="app-nav">
+                <button
+                    class="nav-tab active"
+                    id="tab-generate"
+                    data-tab="generate"
+                >
+                    ✨ 生成
+                </button>
+                <button class="nav-tab hidden" id="tab-crop" data-tab="crop">
+                    ✂ 裁切工坊
+                    <span class="tab-badge">新</span>
+                </button>
+                <button class="nav-tab" id="tab-upload" data-tab="upload">
+                    📤 上传素材
+                </button>
+            </nav>
+
+            <div class="header-spacer"></div>
+
+            <button
+                class="btn-settings"
+                id="btn-open-settings"
+                title="API 设置"
+            >
+                ⚙
+            </button>
+        </header>
+
+        <!-- ══════════════════════════════════════════════════════
+       APP LAYOUT
+       ══════════════════════════════════════════════════════ -->
+        <div class="app-layout">
+            <!-- ── LEFT SIDEBAR ─────────────────────────────────── -->
+            <aside class="sidebar">
+                <div class="sidebar-inner">
+                    <!-- Prompt input -->
+                    <div class="form-group">
+                        <label class="form-label" for="prompt-input">
+                            描述你的表情包
+                            <span class="label-hint">支持角色、风格、主题</span>
+                        </label>
+                        <textarea
+                            class="form-textarea"
+                            id="prompt-input"
+                            placeholder="例如：一只可爱的橘猫，圆圆的眼睛，有点懒，穿着睡衣……&#10;&#10;按 Ctrl+Enter 快速生成"
+                            rows="6"
+                        ></textarea>
+                    </div>
+
+                    <!-- Reference image upload -->
+                    <div class="form-group">
+                        <label class="form-label">
+                            参考图片
+                            <span class="label-hint"
+                                >可选，用于保留角色原型</span
+                            >
+                        </label>
+
+                        <!-- Upload zone -->
+                        <div class="upload-zone" id="upload-zone">
+                            <input
+                                type="file"
+                                id="ref-file-input"
+                                accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.jpge,.webp"
+                            />
+                            <div class="upload-zone-icon">📷</div>
+                            <div class="upload-zone-text">
+                                点击或拖拽上传参考图
+                            </div>
+                            <div class="upload-zone-sub">
+                                支持 JPG、PNG、WebP，最大 10MB
+                            </div>
+                        </div>
+
+                        <!-- Preview (hidden by default) -->
+                        <div
+                            class="upload-preview hidden"
+                            id="ref-image-preview"
+                        >
+                            <img src="" alt="参考图预览" />
+                            <button
+                                class="upload-preview-remove"
+                                id="btn-remove-ref"
+                                title="移除参考图"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Progress indicator -->
+                    <div class="progress-wrap" id="progress-wrap">
+                        <div class="progress-header">
+                            <span class="progress-message" id="progress-message"
+                                >准备中…</span
+                            >
+                            <span class="progress-pct" id="progress-pct"
+                                >0%</span
+                            >
+                        </div>
+                        <div class="progress-bar-track">
+                            <div
+                                class="progress-bar-fill"
+                                id="progress-bar-fill"
+                            ></div>
+                        </div>
+                        <div class="progress-steps" id="progress-steps"></div>
+                    </div>
+
+                    <!-- Generate button -->
+                    <button class="btn btn-primary" id="btn-generate">
+                        ✨ 开始生成
+                    </button>
+
+                    <!-- Generate prompts button -->
+                    <button
+                        class="btn btn-secondary"
+                        id="btn-gen-prompts"
+                        style="width: 100%; margin-top: 8px"
+                    >
+                        📝 仅生成提示词
+                    </button>
+
+                    <!-- Quick tips -->
+                    <div>
+                        <button
+                            class="collapse-toggle"
+                            id="settings-collapse-toggle"
+                        >
+                            <span>💡 提示词技巧</span>
+                            <span class="collapse-toggle-icon">▼</span>
+                        </button>
+                        <div class="collapse-body" id="settings-collapse-body">
+                            <div class="collapse-inner">
+                                <p
+                                    class="text-xs text-secondary"
+                                    style="line-height: 1.7"
+                                >
+                                    • 描述角色外貌、性格特点<br />
+                                    • 指定画风（手绘、像素、卡通…）<br />
+                                    • 说明使用场景（工作群、情侣、日常…）<br />
+                                    • 上传参考图可保留人物原型<br />
+                                    •
+                                    <kbd
+                                        style="
+                                            background: rgba(0, 0, 0, 0.06);
+                                            padding: 1px 5px;
+                                            border-radius: 4px;
+                                            font-size: 11px;
+                                        "
+                                        >Ctrl+Enter</kbd
+                                    >
+                                    快速提交
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Divider + download (only visible after generation) -->
+                    <div
+                        id="sidebar-actions"
+                        class="hidden"
+                        style="display: flex; flex-direction: column; gap: 10px"
+                    >
+                        <hr class="divider" />
+                        <button
+                            class="btn btn-secondary"
+                            id="btn-open-crop"
+                            style="width: 100%"
+                        >
+                            ✂ 调整裁切线
+                        </button>
+                        <button
+                            class="btn btn-secondary"
+                            id="btn-download"
+                            style="width: 100%"
+                        >
+                            ⬇ 下载全套资源
+                        </button>
+                    </div>
+                </div>
+                <!-- /sidebar-inner -->
+            </aside>
+            <!-- /sidebar -->
+
+            <!-- ── MAIN CONTENT ──────────────────────────────────── -->
+            <main class="main-content">
+                <!-- ──── GENERATE TAB PANEL ──────────────────────── -->
+                <div class="tab-panel active" id="panel-generate">
+                    <!-- Empty state -->
+                    <div class="empty-state" id="empty-state">
+                        <div class="empty-state-icon">🎭</div>
+                        <div class="empty-state-title">
+                            开始创作你的专属表情包
+                        </div>
+                        <p class="empty-state-sub">
+                            在左侧输入描述，可选上传参考图，<br />然后点击「开始生成」一键生成
+                            24 个表情包 + 横幅 + 图标
+                        </p>
+                        <div
+                            style="
+                                display: flex;
+                                gap: 8px;
+                                flex-wrap: wrap;
+                                justify-content: center;
+                                margin-top: 8px;
+                            "
+                        >
+                            <span class="chip chip-accent"
+                                >🎨 4×6 表情网格</span
+                            >
+                            <span class="chip chip-accent">🖼 横幅图</span>
+                            <span class="chip chip-accent">🔷 App 图标</span>
+                            <span class="chip chip-accent">📝 标题文案</span>
+                        </div>
+                    </div>
+
+                    <!-- Results area (hidden until generation) -->
+                    <div
+                        id="results-area"
+                        class="hidden"
+                        style="display: flex; flex-direction: column; gap: 24px"
+                    >
+                        <!-- Metadata card -->
+                        <div class="card meta-card">
+                            <div class="card-body" style="padding: 20px 24px">
+                                <div class="meta-title" id="meta-title">–</div>
+                                <p
+                                    class="meta-description"
+                                    id="meta-description"
+                                ></p>
+                            </div>
+                        </div>
+
+                        <!-- Meme grid card -->
+                        <div class="card" id="grid-card">
+                            <div class="card-header">
+                                <span class="card-title">
+                                    <span class="card-title-icon">🎭</span>
+                                    表情包网格（24 个）
+                                </span>
+                                <div class="card-actions">
+                                    <button
+                                        class="btn btn-ghost btn-sm"
+                                        id="btn-open-crop-header"
+                                    >
+                                        ✂ 调整裁切
+                                    </button>
+                                </div>
+                            </div>
+                            <div
+                                class="meme-grid-display"
+                                id="meme-grid-display"
+                            >
+                                <!-- Cells injected by JS -->
+                            </div>
+                            <div class="download-section">
+                                <div class="download-info">
+                                    <div class="download-info-title">
+                                        下载全套资源
+                                    </div>
+                                    <div class="download-info-sub">
+                                        包含 24 个表情包、横幅、图标及文案
+                                    </div>
+                                </div>
+                                <button
+                                    class="btn btn-primary"
+                                    id="btn-download-card"
+                                    style="width: auto; padding: 10px 22px"
+                                >
+                                    ⬇ 下载 ZIP
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Banner + Logo row -->
+                        <div class="results-grid">
+                            <!-- Banner card -->
+                            <div
+                                class="card hidden"
+                                id="banner-card"
+                                style="grid-column: 1/-1"
+                            >
+                                <div class="card-header">
+                                    <span class="card-title">
+                                        <span class="card-title-icon">🖼</span>
+                                        横幅图
+                                        <span
+                                            class="chip"
+                                            style="
+                                                font-size: 0.7rem;
+                                                padding: 2px 8px;
+                                            "
+                                            >16:9 · 1536×1024</span
+                                        >
+                                    </span>
+                                    <div class="card-actions">
+                                        <button
+                                            class="btn btn-ghost btn-sm"
+                                            id="btn-download-banner"
+                                        >
+                                            ⬇ 保存横幅
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="card-body" style="padding: 12px">
+                                    <img
+                                        class="banner-img"
+                                        id="banner-img"
+                                        src=""
+                                        alt="横幅图"
+                                        style="cursor: zoom-in"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- Logo card -->
+                            <div class="card hidden" id="logo-card">
+                                <div class="card-header">
+                                    <span class="card-title">
+                                        <span class="card-title-icon">🔷</span>
+                                        App 图标
+                                        <span
+                                            class="chip"
+                                            style="
+                                                font-size: 0.7rem;
+                                                padding: 2px 8px;
+                                            "
+                                            >1:1 · 1024×1024</span
+                                        >
+                                    </span>
+                                    <div class="card-actions">
+                                        <button
+                                            class="btn btn-ghost btn-sm"
+                                            id="btn-download-logo"
+                                        >
+                                            ⬇ 保存图标
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="logo-wrap">
+                                    <img
+                                        class="logo-img"
+                                        id="logo-img"
+                                        src=""
+                                        alt="App 图标"
+                                        style="cursor: zoom-in"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <!-- /results-grid -->
+                    </div>
+                    <!-- /results-area -->
+
+                    <!-- ──── PROMPTS RESULT CARD (全宽，与结果并列) ── -->
+                    <div
+                        id="prompts-area"
+                        class="hidden"
+                        style="display: flex; flex-direction: column; gap: 0"
+                    >
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">
+                                <span class="card-title-icon">📋</span>
+                                生成的绘图提示词
+                            </span>
+                            <div class="card-actions">
+                                <span
+                                    class="text-xs text-secondary"
+                                    style="padding: 4px 8px"
+                                    >复制提示词到其他图片生成工具使用</span
+                                >
+                            </div>
+                        </div>
+                        <div
+                            class="card-body"
+                            style="
+                                padding: 20px 24px;
+                                display: flex;
+                                flex-direction: column;
+                                gap: 16px;
+                            "
+                        >
+                            <!-- Title + Description row -->
+                            <div
+                                style="
+                                    display: grid;
+                                    grid-template-columns: 1fr 1fr;
+                                    gap: 12px;
+                                "
+                                class="prompt-meta-row"
+                            >
+                                <div class="prompt-block">
+                                    <div class="prompt-block-label">
+                                        📌 标题
+                                    </div>
+                                    <div class="prompt-block-body">
+                                        <div
+                                            class="prompt-block-text"
+                                            id="prompt-title-text"
+                                        ></div>
+                                        <button
+                                            class="btn-copy"
+                                            onclick="
+                                                copyPrompt('prompt-title-text')
+                                            "
+                                            title="复制标题"
+                                        >
+                                            ⎘
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="prompt-block">
+                                    <div class="prompt-block-label">
+                                        📝 简介
+                                    </div>
+                                    <div class="prompt-block-body">
+                                        <div
+                                            class="prompt-block-text"
+                                            id="prompt-desc-text"
+                                        ></div>
+                                        <button
+                                            class="btn-copy"
+                                            onclick="
+                                                copyPrompt('prompt-desc-text')
+                                            "
+                                            title="复制简介"
+                                        >
+                                            ⎘
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Grid prompt -->
+                            <div class="prompt-block prompt-block-full">
+                                <div class="prompt-block-label">
+                                    🎨 表情包网格提示词
+                                    <span
+                                        class="chip"
+                                        style="
+                                            font-size: 0.68rem;
+                                            padding: 2px 8px;
+                                        "
+                                        >4×6 · 1536×1024</span
+                                    >
+                                </div>
+                                <div class="prompt-block-body">
+                                    <div
+                                        class="prompt-block-text prompt-block-code"
+                                        id="prompt-grid-text"
+                                    ></div>
+                                    <button
+                                        class="btn-copy"
+                                        onclick="copyPrompt('prompt-grid-text')"
+                                        title="复制提示词"
+                                    >
+                                        ⎘
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Banner + Logo prompts row -->
+                            <div
+                                style="
+                                    display: grid;
+                                    grid-template-columns: 1fr 1fr;
+                                    gap: 12px;
+                                "
+                                class="prompt-meta-row"
+                            >
+                                <div class="prompt-block prompt-block-full">
+                                    <div class="prompt-block-label">
+                                        🖼 横幅提示词
+                                        <span
+                                            class="chip"
+                                            style="
+                                                font-size: 0.68rem;
+                                                padding: 2px 8px;
+                                            "
+                                            >16:9 · 1536×1024</span
+                                        >
+                                    </div>
+                                    <div class="prompt-block-body">
+                                        <div
+                                            class="prompt-block-text prompt-block-code"
+                                            id="prompt-banner-text"
+                                        ></div>
+                                        <button
+                                            class="btn-copy"
+                                            onclick="
+                                                copyPrompt('prompt-banner-text')
+                                            "
+                                            title="复制提示词"
+                                        >
+                                            ⎘
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="prompt-block prompt-block-full">
+                                    <div class="prompt-block-label">
+                                        🔷 图标提示词
+                                        <span
+                                            class="chip"
+                                            style="
+                                                font-size: 0.68rem;
+                                                padding: 2px 8px;
+                                            "
+                                            >1:1 · 1024×1024</span
+                                        >
+                                    </div>
+                                    <div class="prompt-block-body">
+                                        <div
+                                            class="prompt-block-text prompt-block-code"
+                                            id="prompt-logo-text"
+                                        ></div>
+                                        <button
+                                            class="btn-copy"
+                                            onclick="
+                                                copyPrompt('prompt-logo-text')
+                                            "
+                                            title="复制提示词"
+                                        >
+                                            ⎘
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- /prompts-area -->
+
+                </div>
+                <!-- /panel-generate -->
+
+                <!-- ──── UPLOAD TAB PANEL ────────────────────────── -->
+                <div class="tab-panel" id="panel-upload">
+                    <div
+                        style="display: flex; flex-direction: column; gap: 20px"
+                    >
+                        <!-- Info pill -->
+                        <div class="info-pill">
+                            📤
+                            在此上传已有的表情包网格图、横幅和图标，上传后可直接裁切或打包下载，无需
+                            AI 生成。
+                        </div>
+
+                        <!-- Grid upload -->
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-title">
+                                    <span class="card-title-icon">🎭</span>
+                                    上传表情包网格图
+                                    <span
+                                        class="chip"
+                                        style="
+                                            font-size: 0.7rem;
+                                            padding: 2px 8px;
+                                        "
+                                        >4×6 · 将自动识别分割线</span
+                                    >
+                                </span>
+                            </div>
+                            <div class="card-body" style="padding: 16px">
+                                <div
+                                    class="upload-zone"
+                                    id="upload-zone-grid"
+                                    onclick="
+                                        document
+                                            .getElementById('file-input-grid')
+                                            .click()
+                                    "
+                                    ondragover="
+                                        event.preventDefault();
+                                        this.classList.add('drag-over');
+                                    "
+                                    ondragleave="
+                                        this.classList.remove('drag-over')
+                                    "
+                                    ondrop="handleUploadDrop(event, 'grid')"
+                                >
+                                    <input
+                                        type="file"
+                                        id="file-input-grid"
+                                        accept="image/*"
+                                        style="display: none"
+                                        onchange="
+                                            handleUploadFile(
+                                                this.files[0],
+                                                'grid',
+                                            )
+                                        "
+                                    />
+                                    <div id="upload-grid-placeholder">
+                                        <div
+                                            style="
+                                                font-size: 2rem;
+                                                margin-bottom: 8px;
+                                            "
+                                        >
+                                            🖼
+                                        </div>
+                                        <div
+                                            class="text-sm"
+                                            style="font-weight: 500"
+                                        >
+                                            点击或拖拽上传表情包网格图
+                                        </div>
+                                        <div
+                                            class="text-xs text-secondary"
+                                            style="margin-top: 4px"
+                                        >
+                                            支持 PNG、JPG、WEBP
+                                        </div>
+                                    </div>
+                                    <div
+                                        id="upload-grid-preview"
+                                        class="hidden"
+                                        style="width: 100%; text-align: center"
+                                    >
+                                        <img
+                                            id="upload-grid-img"
+                                            style="
+                                                max-width: 100%;
+                                                max-height: 200px;
+                                                border-radius: 8px;
+                                                object-fit: contain;
+                                            "
+                                            alt="网格预览"
+                                        />
+                                        <div
+                                            class="text-xs text-secondary"
+                                            style="margin-top: 6px"
+                                            id="upload-grid-filename"
+                                        ></div>
+                                    </div>
+                                </div>
+                                <div
+                                    style="
+                                        display: flex;
+                                        gap: 8px;
+                                        margin-top: 12px;
+                                        flex-wrap: wrap;
+                                    "
+                                >
+                                    <button
+                                        class="btn btn-primary btn-sm"
+                                        id="btn-upload-grid-slice"
+                                        disabled
+                                        onclick="sliceUploadedGrid()"
+                                    >
+                                        ✂ 自动切片 &amp; 进入裁切工坊
+                                    </button>
+                                    <button
+                                        class="btn btn-secondary btn-sm"
+                                        id="btn-upload-grid-clear"
+                                        style="display: none"
+                                        onclick="clearUpload('grid')"
+                                    >
+                                        ✕ 移除
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Banner + Logo upload row -->
+                        <div
+                            style="
+                                display: grid;
+                                grid-template-columns: 1fr 1fr;
+                                gap: 16px;
+                            "
+                            class="upload-row-2"
+                        >
+                            <!-- Banner -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <span class="card-title">
+                                        <span class="card-title-icon">🖼</span>
+                                        上传横幅图
+                                        <span
+                                            class="chip"
+                                            style="
+                                                font-size: 0.7rem;
+                                                padding: 2px 8px;
+                                            "
+                                            >16:9</span
+                                        >
+                                    </span>
+                                </div>
+                                <div class="card-body" style="padding: 16px">
+                                    <div
+                                        class="upload-zone upload-zone-sm"
+                                        id="upload-zone-banner"
+                                        onclick="
+                                            document
+                                                .getElementById(
+                                                    'file-input-banner',
+                                                )
+                                                .click()
+                                        "
+                                        ondragover="
+                                            event.preventDefault();
+                                            this.classList.add('drag-over');
+                                        "
+                                        ondragleave="
+                                            this.classList.remove('drag-over')
+                                        "
+                                        ondrop="
+                                            handleUploadDrop(event, 'banner')
+                                        "
+                                    >
+                                        <input
+                                            type="file"
+                                            id="file-input-banner"
+                                            accept="image/*"
+                                            style="display: none"
+                                            onchange="
+                                                handleUploadFile(
+                                                    this.files[0],
+                                                    'banner',
+                                                )
+                                            "
+                                        />
+                                        <div id="upload-banner-placeholder">
+                                            <div
+                                                style="
+                                                    font-size: 1.6rem;
+                                                    margin-bottom: 6px;
+                                                "
+                                            >
+                                                🖼
+                                            </div>
+                                            <div
+                                                class="text-sm"
+                                                style="font-weight: 500"
+                                            >
+                                                点击或拖拽上传横幅
+                                            </div>
+                                            <div
+                                                class="text-xs text-secondary"
+                                                style="margin-top: 4px"
+                                            >
+                                                PNG / JPG / WEBP
+                                            </div>
+                                        </div>
+                                        <div
+                                            id="upload-banner-preview"
+                                            class="hidden"
+                                            style="
+                                                width: 100%;
+                                                text-align: center;
+                                            "
+                                        >
+                                            <img
+                                                id="upload-banner-img"
+                                                style="
+                                                    max-width: 100%;
+                                                    max-height: 120px;
+                                                    border-radius: 6px;
+                                                    object-fit: contain;
+                                                "
+                                                alt="横幅预览"
+                                            />
+                                            <div
+                                                class="text-xs text-secondary"
+                                                style="margin-top: 4px"
+                                                id="upload-banner-filename"
+                                            ></div>
+                                        </div>
+                                    </div>
+                                    <div
+                                        style="
+                                            display: flex;
+                                            gap: 6px;
+                                            margin-top: 10px;
+                                        "
+                                    >
+                                        <button
+                                            class="btn btn-primary btn-sm"
+                                            id="btn-upload-banner-use"
+                                            disabled
+                                            onclick="useUploadedAsset('banner')"
+                                        >
+                                            ✔ 使用此横幅
+                                        </button>
+                                        <button
+                                            class="btn btn-secondary btn-sm"
+                                            id="btn-upload-banner-clear"
+                                            style="display: none"
+                                            onclick="clearUpload('banner')"
+                                        >
+                                            ✕ 移除
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Logo -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <span class="card-title">
+                                        <span class="card-title-icon">🔷</span>
+                                        上传图标
+                                        <span
+                                            class="chip"
+                                            style="
+                                                font-size: 0.7rem;
+                                                padding: 2px 8px;
+                                            "
+                                            >1:1</span
+                                        >
+                                    </span>
+                                </div>
+                                <div class="card-body" style="padding: 16px">
+                                    <div
+                                        class="upload-zone upload-zone-sm"
+                                        id="upload-zone-logo"
+                                        onclick="
+                                            document
+                                                .getElementById(
+                                                    'file-input-logo',
+                                                )
+                                                .click()
+                                        "
+                                        ondragover="
+                                            event.preventDefault();
+                                            this.classList.add('drag-over');
+                                        "
+                                        ondragleave="
+                                            this.classList.remove('drag-over')
+                                        "
+                                        ondrop="handleUploadDrop(event, 'logo')"
+                                    >
+                                        <input
+                                            type="file"
+                                            id="file-input-logo"
+                                            accept="image/*"
+                                            style="display: none"
+                                            onchange="
+                                                handleUploadFile(
+                                                    this.files[0],
+                                                    'logo',
+                                                )
+                                            "
+                                        />
+                                        <div id="upload-logo-placeholder">
+                                            <div
+                                                style="
+                                                    font-size: 1.6rem;
+                                                    margin-bottom: 6px;
+                                                "
+                                            >
+                                                🔷
+                                            </div>
+                                            <div
+                                                class="text-sm"
+                                                style="font-weight: 500"
+                                            >
+                                                点击或拖拽上传图标
+                                            </div>
+                                            <div
+                                                class="text-xs text-secondary"
+                                                style="margin-top: 4px"
+                                            >
+                                                PNG / JPG / WEBP
+                                            </div>
+                                        </div>
+                                        <div
+                                            id="upload-logo-preview"
+                                            class="hidden"
+                                            style="
+                                                width: 100%;
+                                                text-align: center;
+                                            "
+                                        >
+                                            <img
+                                                id="upload-logo-img"
+                                                style="
+                                                    max-width: 100%;
+                                                    max-height: 120px;
+                                                    border-radius: 6px;
+                                                    object-fit: contain;
+                                                "
+                                                alt="图标预览"
+                                            />
+                                            <div
+                                                class="text-xs text-secondary"
+                                                style="margin-top: 4px"
+                                                id="upload-logo-filename"
+                                            ></div>
+                                        </div>
+                                    </div>
+                                    <div
+                                        style="
+                                            display: flex;
+                                            gap: 6px;
+                                            margin-top: 10px;
+                                        "
+                                    >
+                                        <button
+                                            class="btn btn-primary btn-sm"
+                                            id="btn-upload-logo-use"
+                                            disabled
+                                            onclick="useUploadedAsset('logo')"
+                                        >
+                                            ✔ 使用此图标
+                                        </button>
+                                        <button
+                                            class="btn btn-secondary btn-sm"
+                                            id="btn-upload-logo-clear"
+                                            style="display: none"
+                                            onclick="clearUpload('logo')"
+                                        >
+                                            ✕ 移除
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Combined download (only when any asset available) -->
+                        <div
+                            id="upload-download-bar"
+                            class="hidden"
+                            style="
+                                display: flex;
+                                align-items: center;
+                                justify-content: space-between;
+                                background: var(--card-bg);
+                                border: 1px solid var(--border);
+                                border-radius: var(--radius-lg);
+                                padding: 16px 20px;
+                            "
+                        >
+                            <div>
+                                <div
+                                    style="font-weight: 600; font-size: 0.9rem"
+                                >
+                                    打包下载
+                                </div>
+                                <div
+                                    class="text-xs text-secondary"
+                                    id="upload-download-summary"
+                                    style="margin-top: 2px"
+                                ></div>
+                            </div>
+                            <button
+                                class="btn btn-primary"
+                                onclick="downloadZip(this)"
+                                style="width: auto; padding: 10px 22px"
+                            >
+                                ⬇ 下载 ZIP
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- /panel-upload -->
+
+                <!-- ──── CROP STUDIO TAB PANEL ───────────────────── -->
+                <div class="tab-panel" id="panel-crop">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">
+                                <span class="card-title-icon">✂</span>
+                                裁切工坊
+                            </span>
+                            <div class="card-actions">
+                                <button
+                                    class="btn btn-secondary btn-sm"
+                                    id="btn-reset-crop"
+                                >
+                                    ↺ 重置裁切线
+                                </button>
+                                <button
+                                    class="btn btn-primary btn-sm"
+                                    id="btn-confirm-crop"
+                                >
+                                    ✂ 确认裁切
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="card-body" style="padding: 16px">
+                            <!-- Instructions -->
+                            <div
+                                class="info-pill"
+                                style="margin-bottom: 16px; width: fit-content"
+                            >
+                                🖱
+                                拖动红色线（横向）和蓝色线（纵向）调整裁切位置
+                            </div>
+
+                            <!-- Two-column: image + preview -->
+                            <div
+                                style="
+                                    display: grid;
+                                    grid-template-columns: 1fr 200px;
+                                    gap: 20px;
+                                    align-items: start;
+                                "
+                            >
+                                <!-- Crop image panel -->
+                                <div>
+                                    <div
+                                        class="text-xs text-secondary font-semibold"
+                                        style="
+                                            margin-bottom: 8px;
+                                            letter-spacing: 0.05em;
+                                            text-transform: uppercase;
+                                        "
+                                    >
+                                        原始网格图（可拖动裁切线）
+                                    </div>
+                                    <div id="crop-studio-panel">
+                                        <!-- Populated by JS -->
+                                        <div
+                                            style="
+                                                height: 200px;
+                                                display: flex;
+                                                align-items: center;
+                                                justify-content: center;
+                                                background: var(--bg);
+                                                border-radius: var(--radius-md);
+                                            "
+                                        >
+                                            <span class="text-secondary text-sm"
+                                                >请先生成或上传表情包网格图</span
+                                            >
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Mini preview -->
+                                <div>
+                                    <div
+                                        class="text-xs text-secondary font-semibold"
+                                        style="
+                                            margin-bottom: 8px;
+                                            letter-spacing: 0.05em;
+                                            text-transform: uppercase;
+                                        "
+                                    >
+                                        实时预览
+                                    </div>
+                                    <div
+                                        class="crop-preview-grid"
+                                        id="crop-preview-grid"
+                                    >
+                                        <!-- 24 cells injected by JS -->
+                                    </div>
+                                    <p
+                                        class="text-xs text-secondary"
+                                        style="
+                                            margin-top: 10px;
+                                            line-height: 1.5;
+                                        "
+                                    >
+                                        调整裁切线后点击「确认裁切」，切好的表情包将更新到生成页面。
+                                    </p>
+                                </div>
+                            </div>
+                            <!-- /crop grid -->
+                        </div>
+                        <!-- /card-body -->
+
+                        <!-- Footer actions -->
+                        <div
+                            style="
+                                padding: 14px 20px;
+                                border-top: 1px solid var(--border);
+                                display: flex;
+                                gap: 10px;
+                                justify-content: flex-end;
+                                background: rgba(0, 0, 0, 0.02);
+                            "
+                        >
+                            <button
+                                class="btn btn-secondary"
+                                id="btn-back-to-results"
+                                style="padding: 9px 20px"
+                            >
+                                ← 返回结果
+                            </button>
+                            <button
+                                class="btn btn-primary"
+                                id="btn-confirm-crop-footer"
+                                style="padding: 9px 22px"
+                            >
+                                ✂ 确认裁切并更新
+                            </button>
+                        </div>
+                    </div>
+                    <!-- /card -->
+                </div>
+                <!-- /panel-crop -->
+            </main>
+            <!-- /main-content -->
+        </div>
+        <!-- /app-layout -->
+
+        <!-- ══════════════════════════════════════════════════════
+       SETTINGS MODAL
+       ══════════════════════════════════════════════════════ -->
+        <div
+            class="modal-backdrop"
+            id="settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-title"
+        >
+            <div class="modal">
+                <div class="modal-header">
+                    <span class="modal-title" id="settings-title"
+                        >⚙ API 设置</span
+                    >
+                    <button
+                        class="modal-close"
+                        id="btn-close-settings"
+                        aria-label="关闭"
+                    >
+                        ✕
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label" for="settings-api-key">
+                            API Key
+                            <span class="label-hint"
+                                >留空使用服务器默认配置</span
+                            >
+                        </label>
+                        <input
+                            type="password"
+                            class="form-input"
+                            id="settings-api-key"
+                            placeholder="sk-…"
+                            autocomplete="off"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="settings-base-url">
+                            API Base URL
+                            <span class="label-hint"
+                                >留空使用服务器默认配置</span
+                            >
+                        </label>
+                        <input
+                            type="text"
+                            class="form-input"
+                            id="settings-base-url"
+                            placeholder="https://api.openai.com/v1"
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+                    </div>
+
+                    <div
+                        style="
+                            background: var(--bg);
+                            border-radius: var(--radius-md);
+                            padding: 12px 14px;
+                        "
+                    >
+                        <p
+                            class="text-xs text-secondary"
+                            style="line-height: 1.7"
+                        >
+                            💡
+                            设置仅保存在本地浏览器中，随每次请求以请求头方式发送到服务器，
+                            优先级高于服务器端配置文件。API Key
+                            以密码形式存储，不会明文显示。
+                        </p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button
+                        class="btn btn-secondary"
+                        id="btn-close-settings-cancel"
+                        style="padding: 9px 20px"
+                    >
+                        取消
+                    </button>
+                    <button
+                        class="btn btn-primary"
+                        id="btn-save-settings"
+                        style="width: auto; padding: 9px 24px"
+                    >
+                        保存设置
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════
+       LIGHTBOX
+       ══════════════════════════════════════════════════════ -->
+        <div
+            class="lightbox-backdrop"
+            id="lightbox-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-label="图片预览"
+        >
+            <button
+                class="lightbox-close"
+                id="btn-lightbox-close"
+                aria-label="关闭预览"
+            >
+                ✕
+            </button>
+            <img class="lightbox-img" id="lightbox-img" src="" alt="预览图" />
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════
+       TOAST CONTAINER
+       ══════════════════════════════════════════════════════ -->
+        <div
+            class="toast-container"
+            id="toast-container"
+            aria-live="polite"
+            aria-atomic="false"
+        ></div>
+
+        <!-- ══════════════════════════════════════════════════════
+       SCRIPTS
+       ══════════════════════════════════════════════════════ -->
+        <script src="/static/js/app.js"></script>
+        <script>
+            // ── Extra wiring that needs the DOM to be ready ──────────────
+
+            document.addEventListener("DOMContentLoaded", () => {
+                // "调整裁切" button in grid card header
+                const btnOpenCropHeader = document.getElementById(
+                    "btn-open-crop-header",
+                );
+                if (btnOpenCropHeader) {
+                    btnOpenCropHeader.addEventListener("click", () => {
+                        if (!state.hasResults) {
+                            showToast("请先生成表情包", "warning");
+                            return;
+                        }
+                        switchTab("crop");
+                    });
+                }
+
+                // Sync the sidebar download button with the card download button
+                const btnDownloadCard =
+                    document.getElementById("btn-download-card");
+                if (btnDownloadCard) {
+                    btnDownloadCard.addEventListener("click", (e) =>
+                        downloadZip(e.currentTarget),
+                    );
+                }
+
+                // Individual asset download buttons
+                const btnDownloadBanner = document.getElementById(
+                    "btn-download-banner",
+                );
+                if (btnDownloadBanner) {
+                    btnDownloadBanner.addEventListener("click", () => {
+                        if (!state.bannerImageB64) {
+                            showToast("暂无横幅图", "warning");
+                            return;
+                        }
+                        downloadSingleAsset(
+                            state.bannerImageB64,
+                            `${state.title || "banner"}_banner.png`,
+                        );
+                    });
+                }
+
+                const btnDownloadLogo =
+                    document.getElementById("btn-download-logo");
+                if (btnDownloadLogo) {
+                    btnDownloadLogo.addEventListener("click", () => {
+                        if (!state.logoImageB64) {
+                            showToast("暂无图标", "warning");
+                            return;
+                        }
+                        downloadSingleAsset(
+                            state.logoImageB64,
+                            `${state.title || "logo"}_logo.png`,
+                        );
+                    });
+                }
+
+                // "返回结果" in crop studio
+                const btnBack = document.getElementById("btn-back-to-results");
+                if (btnBack) {
+                    btnBack.addEventListener("click", () =>
+                        switchTab("generate"),
+                    );
+                }
+
+                // Secondary confirm crop button in footer
+                const btnConfirmCropFooter = document.getElementById(
+                    "btn-confirm-crop-footer",
+                );
+                if (btnConfirmCropFooter) {
+                    btnConfirmCropFooter.addEventListener("click", confirmCrop);
+                }
+
+                // Second close-settings button (cancel)
+                const btnCloseCancel = document.getElementById(
+                    "btn-close-settings-cancel",
+                );
+                if (btnCloseCancel) {
+                    btnCloseCancel.addEventListener("click", closeSettings);
+                }
+
+                // Show sidebar actions after generation
+                patchStateObserver();
+            });
+
+            // Patch renderResults to also show/hide sidebar actions
+            const _origHandleGenerationDone = handleGenerationDone;
+            function handleGenerationDone(data) {
+                _origHandleGenerationDone(data);
+                const sidebar = document.getElementById("sidebar-actions");
+                if (sidebar) sidebar.classList.remove("hidden");
+            }
+
+            function patchStateObserver() {
+                // Also wire sidebar download button separately (it may already be wired in app.js)
+                const btnDl = document.getElementById("btn-download");
+                // Already bound in app.js – no extra wiring needed.
+            }
+
+            /**
+             * Download a single base64 PNG to the user's device.
+             */
+            function downloadSingleAsset(b64, filename) {
+                const bytes = atob(b64);
+                const arr = new Uint8Array(bytes.length);
+                for (let i = 0; i < bytes.length; i++)
+                    arr[i] = bytes.charCodeAt(i);
+                const blob = new Blob([arr], { type: "image/png" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = filename;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 8000);
+                showToast("图片下载已开始", "success");
+            }
+        </script>
+    </body>
+</html>
