@@ -23,8 +23,8 @@ const state = {
   slices: [],
 
   // Crop studio
-  xCuts: [], // pixel positions in original image [0, x1, x2, x3, x4, x5, W]
-  yCuts: [], // pixel positions in original image [0, y1, y2, y3, H]
+  xCuts: [],
+  yCuts: [],
   origWidth: 0,
   origHeight: 0,
 
@@ -34,7 +34,7 @@ const state = {
   logoPrompt: "",
 
   // Uploaded assets (pending, before "use" is clicked)
-  uploadedGrid: null, // {b64, mime, name}
+  uploadedGrid: null,
   uploadedBanner: null,
   uploadedLogo: null,
 
@@ -49,6 +49,17 @@ const state = {
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
+
+// ── SVG Icon helpers ──────────────────────────────────────────────────────
+
+const icons = {
+  spinner: '<span class="spinner"></span>',
+  spinnerDark: '<span class="spinner spinner-dark"></span>',
+  bolt: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+  doc: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
+  crop: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6.13 1L6 16a2 2 0 002 2h15"/><path d="M1 6.13L16 6a2 2 0 012 2v15"/></svg>',
+  search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+};
 
 // ── Settings (localStorage) ────────────────────────────────────────────────
 
@@ -79,11 +90,16 @@ function getApiHeaders() {
 
 function showToast(message, type = "info", duration = 3500) {
   const container = $("#toast-container");
-  const icons = { success: "✓", error: "✕", warning: "⚠", info: "ℹ" };
+  const svgIcons = {
+    success: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    error: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    warning: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    info: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+  };
 
   const el = document.createElement("div");
   el.className = `toast toast-${type}`;
-  el.innerHTML = `<span class="toast-icon">${icons[type] || "ℹ"}</span>
+  el.innerHTML = `<span class="toast-icon">${svgIcons[type] || svgIcons.info}</span>
                   <span class="toast-msg">${escHtml(message)}</span>`;
   container.appendChild(el);
 
@@ -206,7 +222,6 @@ function showProgress() {
   const wrap = $("#progress-wrap");
   wrap.classList.add("visible");
 
-  // Build step pills
   const stepsEl = $("#progress-steps");
   stepsEl.innerHTML = STEPS.map(
     (s) => `<span class="progress-step" data-step="${s.key}">${s.label}</span>`,
@@ -245,15 +260,13 @@ async function generateAll() {
   state.prompt = prompt;
   state.generating = true;
 
-  // Disable generate button
   const btn = $("#btn-generate");
   btn.disabled = true;
-  btn.innerHTML = `<span class="spinner"></span> 生成中…`;
+  btn.innerHTML = `${icons.spinner} 生成中…`;
 
   showProgress();
   updateProgress("grid", "正在连接服务…", 5);
 
-  // Clear previous results
   clearResults();
 
   try {
@@ -274,7 +287,6 @@ async function generateAll() {
       throw new Error(err.error || `HTTP ${resp.status}`);
     }
 
-    // Read SSE stream
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -284,9 +296,8 @@ async function generateAll() {
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
 
-      // Parse SSE events from buffer
       const events = buffer.split("\n\n");
-      buffer = events.pop(); // keep incomplete last chunk
+      buffer = events.pop();
 
       for (const chunk of events) {
         if (!chunk.trim()) continue;
@@ -324,7 +335,7 @@ async function generateAll() {
   } finally {
     state.generating = false;
     btn.disabled = false;
-    btn.innerHTML = `✨ 开始生成`;
+    btn.innerHTML = `${icons.bolt} 开始生成`;
   }
 }
 
@@ -341,20 +352,16 @@ function handleGenerationDone(data) {
   state.xCuts = data.x_cuts || [];
   state.yCuts = data.y_cuts || [];
 
-  // Compute original image dimensions from grid
   if (state.xCuts.length) state.origWidth = state.xCuts[state.xCuts.length - 1];
-  if (state.yCuts.length)
-    state.origHeight = state.yCuts[state.yCuts.length - 1];
+  if (state.yCuts.length) state.origHeight = state.yCuts[state.yCuts.length - 1];
 
   state.hasResults = true;
   hideProgress();
   renderResults();
   showToast("生成完成！", "success");
 
-  // Switch to generate tab content (show results)
   switchTab("generate");
 
-  // Enable crop studio tab
   const cropTab = $("#tab-crop");
   cropTab.classList.remove("hidden");
   cropTab.classList.add("has-badge");
@@ -382,32 +389,26 @@ function clearResults() {
 }
 
 function renderResults() {
-  // Hide empty state
   $("#empty-state").classList.add("hidden");
   $("#results-area").classList.remove("hidden");
 
-  // Metadata
   $("#meta-title").textContent = state.title;
   $("#meta-description").textContent = state.description;
 
-  // Banner
   if (state.bannerImageB64) {
     const bannerImg = $("#banner-img");
     bannerImg.src = `data:${state.bannerImageMime || "image/png"};base64,${state.bannerImageB64}`;
     $("#banner-card").classList.remove("hidden");
   }
 
-  // Logo
   if (state.logoImageB64) {
     const logoImg = $("#logo-img");
     logoImg.src = `data:${state.logoImageMime || "image/png"};base64,${state.logoImageB64}`;
     $("#logo-card").classList.remove("hidden");
   }
 
-  // Meme grid cells
   renderSlices(state.slices);
 
-  // Show grid card
   if (state.gridImageB64) {
     $("#grid-card").classList.remove("hidden");
   }
@@ -423,7 +424,7 @@ function renderSlices(slices) {
     cell.innerHTML = `
       <img src="data:image/png;base64,${b64}" alt="表情 ${idx + 1}" loading="lazy">
       <div class="meme-cell-overlay">
-        <span class="meme-cell-overlay-icon">🔍</span>
+        <span class="meme-cell-overlay-icon">${icons.search}</span>
       </div>`;
     cell.addEventListener("click", () => openLightbox(b64));
     grid.appendChild(cell);
@@ -503,22 +504,19 @@ function toggleCollapse(toggleEl) {
 
 // ── Crop Studio ────────────────────────────────────────────────────────────
 
-// Internal: display-space cut positions (ratios 0-1)
-// We keep ratios so we can redraw correctly if the display size changes.
-let cropHRatios = []; // 3 interior horizontal cut ratios
-let cropVRatios = []; // 5 interior vertical cut ratios
+let cropHRatios = [];
+let cropVRatios = [];
 
-let cropImg = null; // HTMLImageElement of grid
-let cropContainer = null; // .crop-image-container div
-let cropImgEl = null; // <img> inside container
+let cropImg = null;
+let cropContainer = null;
+let cropImgEl = null;
 
-let dragging = null; // { axis, index, startPos, startRatio }
+let dragging = null;
 
 function initCropStudio() {
   const studio = $("#crop-studio-panel");
   studio.innerHTML = "";
 
-  // ── Container structure
   const wrapper = document.createElement("div");
   wrapper.className = "crop-image-wrapper";
 
@@ -541,15 +539,13 @@ function initCropStudio() {
 
   img.onload = () => {
     cropImg = img;
-    // Convert pixel cuts to ratios
     const W = state.origWidth || img.naturalWidth;
     const H = state.origHeight || img.naturalHeight;
     state.origWidth = W;
     state.origHeight = H;
 
-    // Interior cuts (exclude 0 and max)
-    cropVRatios = state.xCuts.slice(1, -1).map((v) => v / W); // 5 values
-    cropHRatios = state.yCuts.slice(1, -1).map((v) => v / H); // 3 values
+    cropVRatios = state.xCuts.slice(1, -1).map((v) => v / W);
+    cropHRatios = state.yCuts.slice(1, -1).map((v) => v / H);
 
     renderCropOverlay();
     buildCropPreviewGrid();
@@ -560,19 +556,16 @@ function initCropStudio() {
 }
 
 function renderCropOverlay() {
-  // Remove old lines/handles
   $$(".crop-line, .crop-handle", cropContainer).forEach((el) => el.remove());
 
   const dispW = cropImgEl.offsetWidth || cropImgEl.clientWidth;
   const dispH = cropImgEl.offsetHeight || cropImgEl.clientHeight;
 
   if (!dispW || !dispH) {
-    // Retry once image is fully laid out
     requestAnimationFrame(renderCropOverlay);
     return;
   }
 
-  // Horizontal lines (3 interior, top boundary of cut)
   cropHRatios.forEach((ratio, i) => {
     const px = ratio * dispH;
 
@@ -586,9 +579,7 @@ function renderCropOverlay() {
     handle.className = "crop-handle h-handle";
     handle.dataset.axis = "y";
     handle.dataset.index = i;
-    handle.innerHTML = "↕";
-    handle.style.fontSize = "10px";
-    handle.style.color = "rgba(255,100,50,0.9)";
+    handle.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,107,107,0.9)" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
 
     line.appendChild(handle);
     cropContainer.appendChild(line);
@@ -597,7 +588,6 @@ function renderCropOverlay() {
     addDragListeners(handle, "y", i);
   });
 
-  // Vertical lines (5 interior)
   cropVRatios.forEach((ratio, i) => {
     const px = ratio * dispW;
 
@@ -611,9 +601,7 @@ function renderCropOverlay() {
     handle.className = "crop-handle v-handle";
     handle.dataset.axis = "x";
     handle.dataset.index = i;
-    handle.innerHTML = "↔";
-    handle.style.fontSize = "10px";
-    handle.style.color = "rgba(50,150,255,0.9)";
+    handle.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(66,165,245,0.9)" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="5 12 12 19 19 12"/></svg>';
 
     line.appendChild(handle);
     cropContainer.appendChild(line);
@@ -654,13 +642,10 @@ function onDragMove(e) {
   const rect = cropImgEl.getBoundingClientRect();
   const dispLen = axis === "y" ? rect.height : rect.width;
 
-  // Compute new position in display pixels relative to image
   const relPos = clientPos - (axis === "y" ? rect.top : rect.left);
 
-  // Convert to ratio
   let newRatio = Math.max(0.001, Math.min(0.999, relPos / dispLen));
 
-  // Enforce ordering constraints (min spacing: 20px = ~1.5% of 1400px)
   const MIN_GAP = 20 / dispLen;
 
   if (axis === "y") {
@@ -669,7 +654,6 @@ function onDragMove(e) {
     newRatio = Math.max(prev + MIN_GAP, Math.min(next - MIN_GAP, newRatio));
     cropHRatios[index] = newRatio;
 
-    // Move line element
     const lineEl = cropContainer.querySelector(
       `.crop-line.horizontal[data-index="${index}"]`,
     );
@@ -680,14 +664,12 @@ function onDragMove(e) {
     newRatio = Math.max(prev + MIN_GAP, Math.min(next - MIN_GAP, newRatio));
     cropVRatios[index] = newRatio;
 
-    // Move line element
     const lineEl = cropContainer.querySelector(
       `.crop-line.vertical[data-index="${index}"]`,
     );
     if (lineEl) lineEl.style.left = `${newRatio * dispLen}px`;
   }
 
-  // Debounced preview update
   scheduleCropPreviewUpdate();
 }
 
@@ -705,7 +687,7 @@ function onDragEnd() {
   dragging = null;
   document.body.style.cursor = "";
   document.body.style.userSelect = "";
-  updateCropPreview(); // Final update
+  updateCropPreview();
 }
 
 document.addEventListener("mousemove", onDragMove);
@@ -715,7 +697,7 @@ document.addEventListener("touchend", onDragEnd);
 
 // ── Crop preview grid ──────────────────────────────────────────────────────
 
-let cropPreviewCanvases = []; // 24 canvas elements
+let cropPreviewCanvases = [];
 
 function buildCropPreviewGrid() {
   const grid = $("#crop-preview-grid");
@@ -746,7 +728,6 @@ function updateCropPreview() {
   const W = state.origWidth;
   const H = state.origHeight;
 
-  // Build pixel cut arrays from ratios
   const xCuts = [0, ...cropVRatios.map((r) => Math.round(r * W)), W];
   const yCuts = [0, ...cropHRatios.map((r) => Math.round(r * H)), H];
 
@@ -772,7 +753,6 @@ function updateCropPreview() {
       ctx.clearRect(0, 0, cellSize, cellSize);
 
       if (sw > 0 && sh > 0) {
-        // Fit into square with letterboxing
         const scale = Math.min(cellSize / sw, cellSize / sh);
         const dw = sw * scale;
         const dh = sh * scale;
@@ -801,7 +781,7 @@ async function confirmCrop() {
 
   const btn = $("#btn-confirm-crop");
   btn.disabled = true;
-  btn.innerHTML = `<span class="spinner"></span> 裁切中…`;
+  btn.innerHTML = `${icons.spinner} 裁切中…`;
 
   try {
     const resp = await fetch("/api/crop", {
@@ -825,20 +805,18 @@ async function confirmCrop() {
     state.yCuts = yCuts;
     state.hasResults = true;
 
-    // Update displayed meme grid
     renderSlices(state.slices);
     _refreshUploadDownloadBar();
 
     showToast("裁切成功！表情包已更新", "success");
 
-    // Switch back to generate tab to see results
     switchTab("generate");
   } catch (err) {
     showToast(`裁切失败：${err.message}`, "error");
     console.error("[crop]", err);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = `✂ 确认裁切`;
+    btn.innerHTML = `${icons.crop} 确认裁切`;
   }
 }
 
@@ -858,8 +836,6 @@ function resetCropLines() {
   showToast("裁切线已重置", "info");
 }
 
-// ── Download ZIP ───────────────────────────────────────────────────────────
-
 // ── Generate prompts only ──────────────────────────────────────────────────
 
 async function generatePrompts() {
@@ -875,7 +851,7 @@ async function generatePrompts() {
   state.generatingPrompts = true;
   const btn = $("#btn-gen-prompts");
   btn.disabled = true;
-  btn.innerHTML = `<span class="spinner spinner-dark"></span> 生成中…`;
+  btn.innerHTML = `${icons.spinnerDark} 生成中…`;
 
   try {
     const resp = await fetch("/api/generate-prompts", {
@@ -886,14 +862,12 @@ async function generatePrompts() {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
 
-    // Fill in state
     state.gridPrompt   = data.grid_prompt   || "";
     state.bannerPrompt = data.banner_prompt || "";
     state.logoPrompt   = data.logo_prompt   || "";
     if (data.title)       state.title       = data.title;
     if (data.description) state.description = data.description;
 
-    // Populate all prompt text elements
     const setEl = (id, text) => {
       const el = document.getElementById(id);
       if (el) el.textContent = text || "";
@@ -904,29 +878,26 @@ async function generatePrompts() {
     setEl("prompt-banner-text", data.banner_prompt || "");
     setEl("prompt-logo-text",   data.logo_prompt   || "");
 
-    // Show the prompts area card in the main content panel
     const area = document.getElementById("prompts-area");
     if (area) {
       area.classList.remove("hidden");
       area.style.display = "";
     }
 
-    // Make sure we're on the generate tab so the card is visible
     switchTab("generate");
 
-    // Scroll the prompts card into view smoothly
     setTimeout(() => {
       if (area) area.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
 
-    showToast("提示词生成完成！点击 ⎘ 复制", "success", 4000);
+    showToast("提示词生成完成！点击复制按钮复制", "success", 4000);
   } catch (err) {
     showToast(`提示词生成失败：${err.message}`, "error", 5000);
     console.error("[gen-prompts]", err);
   } finally {
     state.generatingPrompts = false;
     btn.disabled = false;
-    btn.innerHTML = `📝 仅生成提示词`;
+    btn.innerHTML = `${icons.doc} 仅生成提示词`;
   }
 }
 
@@ -941,10 +912,9 @@ function copyPrompt(elemId) {
   navigator.clipboard
     .writeText(text)
     .then(() => {
-      showToast("已复制到剪贴板 ✓", "success", 2000);
+      showToast("已复制到剪贴板", "success", 2000);
     })
     .catch(() => {
-      // Fallback
       const ta = document.createElement("textarea");
       ta.value = text;
       ta.style.position = "fixed";
@@ -953,7 +923,7 @@ function copyPrompt(elemId) {
       ta.select();
       document.execCommand("copy");
       document.body.removeChild(ta);
-      showToast("已复制 ✓", "success", 2000);
+      showToast("已复制", "success", 2000);
     });
 }
 
@@ -1077,13 +1047,12 @@ function useUploadedAsset(type) {
     state.bannerImageB64 = state.uploadedBanner.b64;
     state.bannerImageMime = state.uploadedBanner.mime;
     state.hasResults = true;
-    // Refresh banner card in generate panel
     const bannerImg = $("#banner-img");
     bannerImg.src = `data:${state.bannerImageMime};base64,${state.bannerImageB64}`;
     $("#banner-card").classList.remove("hidden");
     $("#results-area").classList.remove("hidden");
     $("#empty-state").classList.add("hidden");
-    showToast("横幅图已更新 ✓", "success");
+    showToast("横幅图已更新", "success");
   } else if (type === "logo" && state.uploadedLogo) {
     state.logoImageB64 = state.uploadedLogo.b64;
     state.logoImageMime = state.uploadedLogo.mime;
@@ -1093,7 +1062,7 @@ function useUploadedAsset(type) {
     $("#logo-card").classList.remove("hidden");
     $("#results-area").classList.remove("hidden");
     $("#empty-state").classList.add("hidden");
-    showToast("图标已更新 ✓", "success");
+    showToast("图标已更新", "success");
   }
   _refreshUploadDownloadBar();
 }
@@ -1107,7 +1076,7 @@ async function sliceUploadedGrid() {
 
   const btn = $("#btn-upload-grid-slice");
   btn.disabled = true;
-  btn.innerHTML = `<span class="spinner spinner-dark"></span> 分析中…`;
+  btn.innerHTML = `${icons.spinnerDark} 分析中…`;
 
   try {
     const resp = await fetch("/api/slice", {
@@ -1118,7 +1087,6 @@ async function sliceUploadedGrid() {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
 
-    // Update state – treat as if it came from generation
     state.gridImageB64 = asset.b64;
     state.gridImageMime = asset.mime;
     state.xCuts = data.x_cuts;
@@ -1128,18 +1096,15 @@ async function sliceUploadedGrid() {
     state.origHeight = data.y_cuts[data.y_cuts.length - 1];
     state.hasResults = true;
 
-    // Show grid in generate panel
     $("#grid-card").classList.remove("hidden");
     $("#results-area").classList.remove("hidden");
     $("#empty-state").classList.add("hidden");
     renderSlices(state.slices);
 
-    // Enable & show crop tab
     const cropTab = $("#tab-crop");
     cropTab.classList.remove("hidden");
     cropTab.classList.add("has-badge");
 
-    // Show sidebar actions
     const sidebar = document.getElementById("sidebar-actions");
     if (sidebar) sidebar.classList.remove("hidden");
 
@@ -1149,13 +1114,12 @@ async function sliceUploadedGrid() {
       4000,
     );
 
-    // Jump to crop studio
     switchTab("crop");
   } catch (err) {
     showToast(`切片失败：${err.message}`, "error");
   } finally {
     btn.disabled = false;
-    btn.innerHTML = `✂ 自动切片 &amp; 进入裁切工坊`;
+    btn.innerHTML = `${icons.crop} 自动切片 &amp; 进入裁切工坊`;
   }
 }
 
@@ -1212,7 +1176,7 @@ async function downloadZip(triggerButton = null) {
   const btn = triggerButton || $("#btn-download");
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = `<span class="spinner spinner-dark"></span> 打包中…`;
+    btn.innerHTML = `${icons.spinnerDark} 打包中…`;
   }
 
   try {
@@ -1241,7 +1205,6 @@ async function downloadZip(triggerButton = null) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
 
-    // Get filename from Content-Disposition header
     const cd = resp.headers.get("Content-Disposition") || "";
     const fnMatch = cd.match(/filename="([^"]+)"/);
     a.download = fnMatch ? fnMatch[1] : `${getPackageTitle() || "wxemoji"}.zip`;
@@ -1258,7 +1221,10 @@ async function downloadZip(triggerButton = null) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = btn.id === "btn-download" ? `⬇ 下载全套资源` : `⬇ 下载 ZIP`;
+      const downloadSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+      btn.innerHTML = btn.id === "btn-download"
+        ? `${downloadSvg} 下载全套资源`
+        : `${downloadSvg} 下载 ZIP`;
     }
   }
 }
@@ -1273,7 +1239,7 @@ function escHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
-// Re-render overlay when window resizes (display size changes)
+// Re-render overlay when window resizes
 let resizeTimer = null;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
@@ -1426,5 +1392,5 @@ document.addEventListener("DOMContentLoaded", () => {
   window.copyPrompt = copyPrompt;
   window.toggleCollapse = toggleCollapse;
 
-  console.log("[wxemoji] 表情包工坊 已就绪 🎉");
+  console.log("[wxemoji] 表情包工坊 已就绪");
 });
