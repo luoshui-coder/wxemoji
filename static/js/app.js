@@ -392,9 +392,6 @@ function renderResults() {
   $("#empty-state").classList.add("hidden");
   $("#results-area").classList.remove("hidden");
 
-  $("#meta-title").textContent = state.title;
-  $("#meta-description").textContent = state.description;
-
   if (state.bannerImageB64) {
     const bannerImg = $("#banner-img");
     bannerImg.src = `data:${state.bannerImageMime || "image/png"};base64,${state.bannerImageB64}`;
@@ -544,12 +541,10 @@ function initCropStudio() {
     state.origWidth = W;
     state.origHeight = H;
 
-    cropVRatios = state.xCuts.slice(1, -1).map((v) => v / W);
-    cropHRatios = state.yCuts.slice(1, -1).map((v) => v / H);
+    cropVRatios = [1/6, 2/6, 3/6, 4/6, 5/6];
+    cropHRatios = [1/4, 2/4, 3/4];
 
     renderCropOverlay();
-    buildCropPreviewGrid();
-    updateCropPreview();
   };
 
   if (img.complete && img.naturalWidth > 0) img.onload();
@@ -669,8 +664,6 @@ function onDragMove(e) {
     );
     if (lineEl) lineEl.style.left = `${newRatio * dispLen}px`;
   }
-
-  scheduleCropPreviewUpdate();
 }
 
 function onDragEnd() {
@@ -687,7 +680,6 @@ function onDragEnd() {
   dragging = null;
   document.body.style.cursor = "";
   document.body.style.userSelect = "";
-  updateCropPreview();
 }
 
 document.addEventListener("mousemove", onDragMove);
@@ -828,11 +820,10 @@ function resetCropLines() {
 
   if (!W || !H) return;
 
-  cropVRatios = state.xCuts.slice(1, -1).map((v) => v / W);
-  cropHRatios = state.yCuts.slice(1, -1).map((v) => v / H);
+  cropVRatios = [1/6, 2/6, 3/6, 4/6, 5/6];
+  cropHRatios = [1/4, 2/4, 3/4];
 
   renderCropOverlay();
-  updateCropPreview();
   showToast("裁切线已重置", "info");
 }
 
@@ -1124,11 +1115,16 @@ async function sliceUploadedGrid() {
 }
 
 function getPackageTitle() {
+  const uploadTitle = ($("#upload-pkg-title")?.value || "").trim();
+  if (uploadTitle) return uploadTitle;
   const promptTitle = ($("#prompt-input")?.value || "").trim().slice(0, 20);
   return state.title || promptTitle || "上传表情包素材";
 }
 
 function getPackageDescription() {
+  const uploadDesc = ($("#upload-pkg-desc")?.value || "").trim();
+  if (uploadDesc) return uploadDesc;
+
   if (state.description) return state.description;
 
   const parts = [];
@@ -1246,7 +1242,6 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(() => {
     if (cropContainer && cropImgEl) {
       renderCropOverlay();
-      updateCropPreview();
     }
   }, 200);
 });
@@ -1286,14 +1281,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Generate button ────────────────────────────────────────────
 
   $("#btn-generate").addEventListener("click", generateAll);
-
-  // Allow Ctrl+Enter in textarea
-  $("#prompt-input").addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      generateAll();
-    }
-  });
 
   // ── Generate prompts button ────────────────────────────────────
 
@@ -1362,6 +1349,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   $("#btn-confirm-crop").addEventListener("click", confirmCrop);
   $("#btn-reset-crop").addEventListener("click", resetCropLines);
+  $("#btn-back-to-results").addEventListener("click", () => switchTab("generate"));
 
   // ── Settings collapse ──────────────────────────────────────────
 
