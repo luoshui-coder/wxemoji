@@ -516,20 +516,22 @@ def find_grid_cuts(
     return cuts
 
 
-def slice_image(image_b64: str) -> dict:
+def slice_image(image_b64: str, cols: int = 0, rows: int = 0) -> dict:
     """
-    Auto-detect grid lines and slice the image into 24 cells.
+    Auto-detect grid lines and slice the image into cells.
     Returns dict with x_cuts, y_cuts, and slices (list of base64 PNGs).
     """
+    cols = cols or COLS
+    rows = rows or ROWS
     img_bytes = base64.b64decode(image_b64)
     img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
     width, height = img.size
 
     pixels = img.load()
-    x_cuts = find_grid_cuts(pixels, width, height, COLS, "x")
-    y_cuts = find_grid_cuts(pixels, width, height, ROWS, "y")
+    x_cuts = find_grid_cuts(pixels, width, height, cols, "x")
+    y_cuts = find_grid_cuts(pixels, width, height, rows, "y")
 
-    slices = _crop_slices(img, x_cuts, y_cuts)
+    slices = _crop_slices(img, x_cuts, y_cuts, cols=cols, rows=rows)
     return {"x_cuts": x_cuts, "y_cuts": y_cuts, "slices": slices}
 
 
@@ -538,16 +540,20 @@ def _crop_slices(
     x_cuts: list[int],
     y_cuts: list[int],
     seam_trim: int = 0,
+    cols: int = 0,
+    rows: int = 0,
 ) -> list[str]:
     """Crop image cells based on exact pixel cut positions. Returns list of base64 PNGs."""
+    cols = cols or COLS
+    rows = rows or ROWS
     slices: list[str] = []
     trim = max(0, int(seam_trim or 0))
-    for row in range(ROWS):
-        for col in range(COLS):
+    for row in range(rows):
+        for col in range(cols):
             x0 = x_cuts[col] + (trim if col > 0 else 0)
-            x1 = x_cuts[col + 1] - (trim if col < COLS - 1 else 0)
+            x1 = x_cuts[col + 1] - (trim if col < cols - 1 else 0)
             y0 = y_cuts[row] + (trim if row > 0 else 0)
-            y1 = y_cuts[row + 1] - (trim if row < ROWS - 1 else 0)
+            y1 = y_cuts[row + 1] - (trim if row < rows - 1 else 0)
             if x1 <= x0 or y1 <= y0:
                 x0 = x_cuts[col]
                 x1 = x_cuts[col + 1]
@@ -763,11 +769,13 @@ def api_slice():
 
     body = request.get_json(force=True, silent=True) or {}
     image_b64: str = body.get("image_base64", "")
+    cols: int = int(body.get("cols", 0) or 0)
+    rows: int = int(body.get("rows", 0) or 0)
     if not image_b64:
         return jsonify({"error": "缺少 image_base64 字段"}), 400
 
     try:
-        result = slice_image(image_b64)
+        result = slice_image(image_b64, cols=cols, rows=rows)
         return jsonify(result)
     except Exception as exc:
         return jsonify({"error": f"切片失败: {exc}"}), 500
@@ -789,13 +797,18 @@ def api_crop():
     x_cuts: list[int] = body.get("x_cuts", [])
     y_cuts: list[int] = body.get("y_cuts", [])
     seam_trim: int = int(body.get("seam_trim", 0) or 0)
+    cols: int = int(body.get("cols", 0) or 0)
+    rows: int = int(body.get("rows", 0) or 0)
+
+    _cols = cols or COLS
+    _rows = rows or ROWS
 
     if not image_b64:
         return jsonify({"error": "缺少 image_base64 字段"}), 400
-    if len(x_cuts) != COLS + 1:
-        return jsonify({"error": f"x_cuts 长度应为 {COLS + 1}"}), 400
-    if len(y_cuts) != ROWS + 1:
-        return jsonify({"error": f"y_cuts 长度应为 {ROWS + 1}"}), 400
+    if len(x_cuts) != _cols + 1:
+        return jsonify({"error": f"x_cuts 长度应为 {_cols + 1}"}), 400
+    if len(y_cuts) != _rows + 1:
+        return jsonify({"error": f"y_cuts 长度应为 {_rows + 1}"}), 400
 
     try:
         img_bytes = base64.b64decode(image_b64)
@@ -805,6 +818,8 @@ def api_crop():
             [int(v) for v in x_cuts],
             [int(v) for v in y_cuts],
             seam_trim=seam_trim,
+            cols=_cols,
+            rows=_rows,
         )
         return jsonify({"slices": slices})
     except Exception as exc:

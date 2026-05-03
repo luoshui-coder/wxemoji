@@ -1046,6 +1046,40 @@ p {
 
 /* ── Crop Studio Panel ────────────────────────────────────── */
 
+.upload-layout-switch {
+    display: inline-flex;
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    background: var(--bg-warm);
+    padding: 2px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.upload-layout-switch .btn {
+    border-radius: var(--radius-full);
+    border: none;
+    padding: 4px 14px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: all 0.25s ease;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.upload-layout-switch .btn.active {
+    background: var(--accent);
+    color: var(--text-inverse);
+    box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+.upload-layout-switch .btn:hover:not(.active) {
+    background: var(--surface-solid);
+    color: var(--text-primary);
+}
+
 .crop-card {
     display: flex;
     flex-direction: column;

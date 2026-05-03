@@ -356,6 +356,7 @@ function handleGenerationDone(data) {
   if (state.yCuts.length) state.origHeight = state.yCuts[state.yCuts.length - 1];
 
   state.hasResults = true;
+  cropLayout = '4x6';
   hideProgress();
   renderResults();
   showToast("生成完成！", "success");
@@ -414,6 +415,8 @@ function renderResults() {
 function renderSlices(slices) {
   const grid = $("#meme-grid-display");
   grid.innerHTML = "";
+  const cols = slices.length <= 16 ? 4 : 6;
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
 
   slices.forEach((b64, idx) => {
     const cell = document.createElement("div");
@@ -500,10 +503,22 @@ function toggleCollapse(toggleEl) {
   bodyEl.classList.toggle("open", !isOpen);
 }
 
+// ── Upload layout selector ─────────────────────────────────────────────────
+
+let uploadLayout = '4x6';
+
+function selectUploadLayout(layout) {
+  uploadLayout = layout;
+  $$(".upload-layout-switch .btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.layout === layout);
+  });
+}
+
 // ── Crop Studio ────────────────────────────────────────────────────────────
 
 let cropHRatios = [];
 let cropVRatios = [];
+let cropLayout = '4x6';  // '4x6' | '4x4'
 
 let cropImg = null;
 let cropContainer = null;
@@ -556,6 +571,9 @@ function initCropStudio() {
       const scaledYCuts = (oH === nH) ? state.yCuts : state.yCuts.map((y) => Math.round(y * nH / oH));
       cropVRatios = scaledXCuts.slice(1, -1).map((x) => x / nW);
       cropHRatios = scaledYCuts.slice(1, -1).map((y) => y / nH);
+    } else if (cropLayout === '4x4') {
+      cropVRatios = [1/4, 2/4, 3/4];
+      cropHRatios = [1/4, 2/4, 3/4];
     } else {
       cropVRatios = [1/6, 2/6, 3/6, 4/6, 5/6];
       cropHRatios = [1/4, 2/4, 3/4];
@@ -616,8 +634,10 @@ function quantizeCropRatio(axis, ratio) {
 }
 
 function getCropSeamTrim(width, height) {
-  const cellW = width / 6;
-  const cellH = height / 4;
+  const cols = cropLayout === '4x4' ? 4 : 6;
+  const rows = 4;
+  const cellW = width / cols;
+  const cellH = height / rows;
   return Math.max(2, Math.min(14, Math.round(Math.min(cellW, cellH) * 0.012)));
 }
 
@@ -807,8 +827,8 @@ function updateCropPreview() {
   const yCuts = [0, ...cropHRatios.map((r) => Math.round(r * H)), H];
   const seamTrim = getCropSeamTrim(W, H);
 
-  const COLS = 6,
-    ROWS = 4;
+  const COLS = cropLayout === '4x4' ? 4 : 6;
+  const ROWS = 4;
 
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
@@ -854,6 +874,8 @@ async function confirmCrop() {
   // Use the loaded source image dimensions so submitted cuts match the visible lines.
   const { width: W, height: H } = getCropSourceSize();
 
+  const cols = cropLayout === '4x4' ? 4 : 6;
+  const rows = 4;
   const xCuts = [0, ...cropVRatios.map((r) => Math.round(r * W)), W];
   const yCuts = [0, ...cropHRatios.map((r) => Math.round(r * H)), H];
   const seamTrim = getCropSeamTrim(W, H);
@@ -871,6 +893,8 @@ async function confirmCrop() {
         x_cuts: xCuts,
         y_cuts: yCuts,
         seam_trim: seamTrim,
+        cols: cols,
+        rows: rows,
       }),
     });
 
@@ -908,7 +932,11 @@ function resetCropLines() {
 
   if (!W || !H) return;
 
-  cropVRatios = [1/6, 2/6, 3/6, 4/6, 5/6];
+  if (cropLayout === '4x4') {
+    cropVRatios = [1/4, 2/4, 3/4];
+  } else {
+    cropVRatios = [1/6, 2/6, 3/6, 4/6, 5/6];
+  }
   cropHRatios = [1/4, 2/4, 3/4];
 
   renderCropOverlay();
@@ -1153,6 +1181,11 @@ async function sliceUploadedGrid() {
     return;
   }
 
+  // Set crop layout based on upload selection
+  cropLayout = uploadLayout;
+  const cols = cropLayout === '4x4' ? 4 : 6;
+  const rows = 4;
+
   const btn = $("#btn-upload-grid-slice");
   btn.disabled = true;
   btn.innerHTML = `${icons.spinnerDark} 分析中…`;
@@ -1161,7 +1194,7 @@ async function sliceUploadedGrid() {
     const resp = await fetch("/api/slice", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getApiHeaders() },
-      body: JSON.stringify({ image_base64: asset.b64 }),
+      body: JSON.stringify({ image_base64: asset.b64, cols, rows }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
@@ -1464,6 +1497,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.clearUpload = clearUpload;
   window.useUploadedAsset = useUploadedAsset;
   window.sliceUploadedGrid = sliceUploadedGrid;
+  window.selectUploadLayout = selectUploadLayout;
   window.downloadZip = downloadZip;
   window.copyPrompt = copyPrompt;
   window.toggleCollapse = toggleCollapse;
