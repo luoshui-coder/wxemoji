@@ -459,8 +459,9 @@ function switchTab(tabName) {
         right: "0",
         bottom: "0",
         zIndex: "5",
-        overflowY: "auto",
-        padding: "28px",
+        overflowY: tabName === "crop" ? "hidden" : "auto",
+        overflowX: "hidden",
+        padding: tabName === "crop" ? "24px" : "28px",
         background: "var(--bg)",
         boxSizing: "border-box",
         opacity: "1",
@@ -510,7 +511,15 @@ let cropImgEl = null;
 
 let dragging = null;
 
+let _cropResizeHandler = null;
+
 function initCropStudio() {
+  // Clean up previous resize handler
+  if (_cropResizeHandler) {
+    window.removeEventListener("resize", _cropResizeHandler);
+    _cropResizeHandler = null;
+  }
+
   const studio = $("#crop-studio-panel");
   studio.innerHTML = "";
 
@@ -536,39 +545,109 @@ function initCropStudio() {
 
   img.onload = () => {
     cropImg = img;
-    const W = state.origWidth || img.naturalWidth;
-    const H = state.origHeight || img.naturalHeight;
-    state.origWidth = W;
-    state.origHeight = H;
+    const nW = img.naturalWidth;
+    const nH = img.naturalHeight;
 
-    cropVRatios = [1/6, 2/6, 3/6, 4/6, 5/6];
-    cropHRatios = [1/4, 2/4, 3/4];
+    if (state.xCuts && state.xCuts.length > 2 && state.yCuts && state.yCuts.length > 2) {
+      // Rescale cuts to current image dimensions if they differ from orig
+      const oW = state.origWidth || nW;
+      const oH = state.origHeight || nH;
+      const scaledXCuts = (oW === nW) ? state.xCuts : state.xCuts.map((x) => Math.round(x * nW / oW));
+      const scaledYCuts = (oH === nH) ? state.yCuts : state.yCuts.map((y) => Math.round(y * nH / oH));
+      cropVRatios = scaledXCuts.slice(1, -1).map((x) => x / nW);
+      cropHRatios = scaledYCuts.slice(1, -1).map((y) => y / nH);
+    } else {
+      cropVRatios = [1/6, 2/6, 3/6, 4/6, 5/6];
+      cropHRatios = [1/4, 2/4, 3/4];
+    }
 
-    renderCropOverlay();
+    // Update state to match actual image dimensions
+    state.origWidth = nW;
+    state.origHeight = nH;
+
+    // Wait for layout to settle before positioning lines
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        renderCropOverlay();
+        // Re-render on window resize
+        _cropResizeHandler = () => renderCropOverlay();
+        window.addEventListener("resize", _cropResizeHandler);
+      });
+    });
   };
 
   if (img.complete && img.naturalWidth > 0) img.onload();
 }
 
+let _cropOverlayRetry = 0;
+
+function getCropImageFrame() {
+  if (!cropContainer || !cropImgEl) return null;
+
+  const imgRect = cropImgEl.getBoundingClientRect();
+  const containerRect = cropContainer.getBoundingClientRect();
+  const width = imgRect.width || cropImgEl.offsetWidth || cropImgEl.clientWidth;
+  const height = imgRect.height || cropImgEl.offsetHeight || cropImgEl.clientHeight;
+
+  if (!width || !height) return null;
+
+  return {
+    left: imgRect.left,
+    top: imgRect.top,
+    offsetX: imgRect.left - containerRect.left,
+    offsetY: imgRect.top - containerRect.top,
+    width,
+    height,
+  };
+}
+
+function getCropSourceSize() {
+  const width = cropImgEl?.naturalWidth || state.origWidth;
+  const height = cropImgEl?.naturalHeight || state.origHeight;
+  return { width, height };
+}
+
+function quantizeCropRatio(axis, ratio) {
+  const { width, height } = getCropSourceSize();
+  const length = axis === "y" ? height : width;
+  if (!length) return ratio;
+
+  return Math.max(0, Math.min(1, Math.round(ratio * length) / length));
+}
+
+function getCropSeamTrim(width, height) {
+  const cellW = width / 6;
+  const cellH = height / 4;
+  return Math.max(2, Math.min(14, Math.round(Math.min(cellW, cellH) * 0.012)));
+}
+
 function renderCropOverlay() {
-  $$(".crop-line, .crop-handle", cropContainer).forEach((el) => el.remove());
+  if (!cropContainer || !cropImgEl) return;
 
-  const dispW = cropImgEl.offsetWidth || cropImgEl.clientWidth;
-  const dispH = cropImgEl.offsetHeight || cropImgEl.clientHeight;
+  const frame = getCropImageFrame();
 
-  if (!dispW || !dispH) {
-    requestAnimationFrame(renderCropOverlay);
+  if (!frame) {
+    // Image not laid out yet — retry up to 20 frames
+    if (_cropOverlayRetry < 20) {
+      _cropOverlayRetry++;
+      requestAnimationFrame(renderCropOverlay);
+    }
     return;
   }
+  _cropOverlayRetry = 0;
+
+  $$(".crop-line, .crop-handle", cropContainer).forEach((el) => el.remove());
 
   cropHRatios.forEach((ratio, i) => {
-    const px = ratio * dispH;
+    const px = frame.offsetY + ratio * frame.height;
 
     const line = document.createElement("div");
     line.className = "crop-line horizontal";
     line.dataset.axis = "y";
     line.dataset.index = i;
     line.style.top = `${px}px`;
+    line.style.left = `${frame.offsetX}px`;
+    line.style.width = `${frame.width}px`;
 
     const handle = document.createElement("div");
     handle.className = "crop-handle h-handle";
@@ -584,13 +663,15 @@ function renderCropOverlay() {
   });
 
   cropVRatios.forEach((ratio, i) => {
-    const px = ratio * dispW;
+    const px = frame.offsetX + ratio * frame.width;
 
     const line = document.createElement("div");
     line.className = "crop-line vertical";
     line.dataset.axis = "x";
     line.dataset.index = i;
     line.style.left = `${px}px`;
+    line.style.top = `${frame.offsetY}px`;
+    line.style.height = `${frame.height}px`;
 
     const handle = document.createElement("div");
     handle.className = "crop-handle v-handle";
@@ -634,10 +715,11 @@ function onDragMove(e) {
     ? e.touches[0][axis === "y" ? "clientY" : "clientX"]
     : e[axis === "y" ? "clientY" : "clientX"];
 
-  const rect = cropImgEl.getBoundingClientRect();
-  const dispLen = axis === "y" ? rect.height : rect.width;
+  const frame = getCropImageFrame();
+  if (!frame) return;
 
-  const relPos = clientPos - (axis === "y" ? rect.top : rect.left);
+  const dispLen = axis === "y" ? frame.height : frame.width;
+  const relPos = clientPos - (axis === "y" ? frame.top : frame.left);
 
   let newRatio = Math.max(0.001, Math.min(0.999, relPos / dispLen));
 
@@ -647,22 +729,24 @@ function onDragMove(e) {
     const prev = index === 0 ? 0 : cropHRatios[index - 1];
     const next = index === cropHRatios.length - 1 ? 1 : cropHRatios[index + 1];
     newRatio = Math.max(prev + MIN_GAP, Math.min(next - MIN_GAP, newRatio));
+    newRatio = Math.max(prev + MIN_GAP, Math.min(next - MIN_GAP, quantizeCropRatio(axis, newRatio)));
     cropHRatios[index] = newRatio;
 
     const lineEl = cropContainer.querySelector(
       `.crop-line.horizontal[data-index="${index}"]`,
     );
-    if (lineEl) lineEl.style.top = `${newRatio * dispLen}px`;
+    if (lineEl) lineEl.style.top = `${frame.offsetY + newRatio * dispLen}px`;
   } else {
     const prev = index === 0 ? 0 : cropVRatios[index - 1];
     const next = index === cropVRatios.length - 1 ? 1 : cropVRatios[index + 1];
     newRatio = Math.max(prev + MIN_GAP, Math.min(next - MIN_GAP, newRatio));
+    newRatio = Math.max(prev + MIN_GAP, Math.min(next - MIN_GAP, quantizeCropRatio(axis, newRatio)));
     cropVRatios[index] = newRatio;
 
     const lineEl = cropContainer.querySelector(
       `.crop-line.vertical[data-index="${index}"]`,
     );
-    if (lineEl) lineEl.style.left = `${newRatio * dispLen}px`;
+    if (lineEl) lineEl.style.left = `${frame.offsetX + newRatio * dispLen}px`;
   }
 }
 
@@ -717,11 +801,11 @@ function updateCropPreview() {
   previewRafId = null;
   if (!cropImg || !cropImg.complete || !cropImg.naturalWidth) return;
 
-  const W = state.origWidth;
-  const H = state.origHeight;
+  const { width: W, height: H } = getCropSourceSize();
 
   const xCuts = [0, ...cropVRatios.map((r) => Math.round(r * W)), W];
   const yCuts = [0, ...cropHRatios.map((r) => Math.round(r * H)), H];
+  const seamTrim = getCropSeamTrim(W, H);
 
   const COLS = 6,
     ROWS = 4;
@@ -732,10 +816,12 @@ function updateCropPreview() {
       const canvas = cropPreviewCanvases[idx];
       if (!canvas) continue;
 
-      const sx = xCuts[col];
-      const sy = yCuts[row];
-      const sw = xCuts[col + 1] - sx;
-      const sh = yCuts[row + 1] - sy;
+      const sx = xCuts[col] + (col > 0 ? seamTrim : 0);
+      const sy = yCuts[row] + (row > 0 ? seamTrim : 0);
+      const ex = xCuts[col + 1] - (col < COLS - 1 ? seamTrim : 0);
+      const ey = yCuts[row + 1] - (row < ROWS - 1 ? seamTrim : 0);
+      const sw = ex - sx;
+      const sh = ey - sy;
 
       const cellSize = canvas.parentElement.clientWidth || 60;
       canvas.width = cellSize;
@@ -765,11 +851,12 @@ async function confirmCrop() {
     return;
   }
 
-  const W = state.origWidth;
-  const H = state.origHeight;
+  // Use the loaded source image dimensions so submitted cuts match the visible lines.
+  const { width: W, height: H } = getCropSourceSize();
 
   const xCuts = [0, ...cropVRatios.map((r) => Math.round(r * W)), W];
   const yCuts = [0, ...cropHRatios.map((r) => Math.round(r * H)), H];
+  const seamTrim = getCropSeamTrim(W, H);
 
   const btn = $("#btn-confirm-crop");
   btn.disabled = true;
@@ -783,6 +870,7 @@ async function confirmCrop() {
         image_base64: state.gridImageB64,
         x_cuts: xCuts,
         y_cuts: yCuts,
+        seam_trim: seamTrim,
       }),
     });
 

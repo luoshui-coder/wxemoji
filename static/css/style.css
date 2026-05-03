@@ -926,13 +926,13 @@ p {
 .meme-grid-display {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
-    gap: 6px;
+    gap: 0;
     padding: 20px;
 }
 
 .meme-cell {
     aspect-ratio: 1 / 1;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     overflow: hidden;
     background: var(--bg);
     cursor: pointer;
@@ -1049,7 +1049,8 @@ p {
 .crop-card {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - var(--header-height) - 56px);
+    flex: 1;
+    min-height: 0;
 }
 
 .crop-hint {
@@ -1069,7 +1070,9 @@ p {
 
 .crop-body #crop-studio-panel {
     flex: 1;
+    min-height: 0;
     overflow: hidden;
+    display: flex;
 }
 
 .crop-image-container {
@@ -1082,11 +1085,12 @@ p {
     box-shadow: var(--shadow-md);
     cursor: crosshair;
     border: 2px solid var(--border);
+    box-sizing: border-box;
 }
 
 .crop-image-container img {
-    width: 100%;
-    max-height: calc(100vh - var(--header-height) - 110px);
+    max-width: 100%;
+    max-height: calc(100vh - var(--header-height) - 180px);
     object-fit: contain;
     display: block;
     pointer-events: none;
@@ -1096,7 +1100,8 @@ p {
 .crop-image-wrapper {
     overflow: hidden;
     border-radius: var(--radius-md);
-    max-height: 100%;
+    flex: 1;
+    min-height: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1110,35 +1115,51 @@ p {
 }
 
 .crop-line.horizontal {
-    left: 0;
-    right: 0;
-    height: 1px;
-    border-top: 1.5px dashed var(--accent);
-    background: none;
+    height: 12px;
+    background: transparent;
     cursor: ns-resize;
     pointer-events: all;
     transition: var(--transition-fast);
-    /* Wider hit area */
-    padding: 5px 0;
-    margin-top: -5px;
+    transform: translateY(-50%);
 }
 
 .crop-line.vertical {
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    border-left: 1.5px dashed var(--sky);
-    background: none;
+    width: 12px;
+    background: transparent;
     cursor: ew-resize;
     pointer-events: all;
     transition: var(--transition-fast);
-    /* Wider hit area */
-    padding: 0 5px;
-    margin-left: -5px;
+    transform: translateX(-50%);
+}
+
+.crop-line.horizontal::before,
+.crop-line.vertical::before {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+}
+
+.crop-line.horizontal::before {
+    left: 0;
+    right: 0;
+    top: 50%;
+    border-top: 1.5px dashed var(--accent);
+}
+
+.crop-line.vertical::before {
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    border-left: 1.5px dashed var(--sky);
 }
 
 .crop-line.horizontal:hover,
 .crop-line.horizontal.dragging {
+    transform: translateY(-50%);
+}
+
+.crop-line.horizontal:hover::before,
+.crop-line.horizontal.dragging::before {
     border-top-color: var(--accent-hover);
     border-top-width: 2px;
     border-top-style: solid;
@@ -1146,6 +1167,11 @@ p {
 
 .crop-line.vertical:hover,
 .crop-line.vertical.dragging {
+    transform: translateX(-50%);
+}
+
+.crop-line.vertical:hover::before,
+.crop-line.vertical.dragging::before {
     border-left-color: #2196f3;
     border-left-width: 2px;
     border-left-style: solid;
@@ -1624,9 +1650,8 @@ p {
     z-index: 5;
     display: flex !important;
     flex-direction: column;
-    gap: 28px;
-    overflow-y: auto;
-    padding: 32px;
+    overflow: hidden;
+    padding: 24px;
     background: var(--bg);
     box-sizing: border-box;
 }
@@ -1809,7 +1834,7 @@ p {
 
     .meme-grid-display {
         grid-template-columns: repeat(4, 1fr);
-        gap: 4px;
+        gap: 0;
         padding: 12px;
     }
 

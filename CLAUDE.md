@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 表情包工坊 (Meme Studio) — AI 表情包生成 Web 应用。用户输入角色描述（可选上传参考图），自动生成 24 格表情包网格、横幅图、App 图标及中文文案，支持裁切调整和 ZIP 打包下载。
 
+## 系统要求
+
+- Python 3.10+
+
 ## 常用命令
 
 ```bash
@@ -33,6 +37,9 @@ cp config.yaml.example config.yaml
 
 配置优先级：`config.yaml` > `.env` > 环境变量 > 内置默认值。详见 `config.py`。
 
+可选配置项：
+- `gateway_api_key` — 网关鉴权密钥，设置后所有 API 请求需携带 `X-Gateway-Key` 请求头
+
 ## 架构
 
 单文件 Flask 单体应用，无数据库、无后台任务队列。
@@ -47,9 +54,16 @@ cp config.yaml.example config.yaml
 
 SSE 流式端点，依次执行：生成 24 格网格图 → 自动切片 → 生成横幅图 → 生成图标 → 生成标题/简介文案 → 返回结果。每步通过 `progress` 事件推送进度。
 
+### API 端点
+
+- `POST /api/generate` — SSE 流式生成表情包套装
+- `POST /api/slice` — 对网格图进行像素分析自动切片
+- `POST /api/crop` — 使用精确像素坐标重新裁切
+- `POST /api/download-zip` — 打包所有资源返回 ZIP 文件
+
 ### AI API 调用
 
-使用 OpenAI 兼容接口，通过 httpx 同步调用（带重试逻辑）：
+使用 OpenAI 兼容接口，通过 httpx 同步调用（带指数退避重试，最多 5 次）：
 - 图像生成：`/v1/images/generations` 和 `/v1/images/edits`（模型 `gpt-image-2`）
 - 文本生成：`/v1/chat/completions`（模型 `gpt-5.5`）
 

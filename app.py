@@ -533,15 +533,26 @@ def slice_image(image_b64: str) -> dict:
     return {"x_cuts": x_cuts, "y_cuts": y_cuts, "slices": slices}
 
 
-def _crop_slices(img: Image.Image, x_cuts: list[int], y_cuts: list[int]) -> list[str]:
+def _crop_slices(
+    img: Image.Image,
+    x_cuts: list[int],
+    y_cuts: list[int],
+    seam_trim: int = 0,
+) -> list[str]:
     """Crop image cells based on exact pixel cut positions. Returns list of base64 PNGs."""
     slices: list[str] = []
+    trim = max(0, int(seam_trim or 0))
     for row in range(ROWS):
         for col in range(COLS):
-            x0 = x_cuts[col]
-            x1 = x_cuts[col + 1]
-            y0 = y_cuts[row]
-            y1 = y_cuts[row + 1]
+            x0 = x_cuts[col] + (trim if col > 0 else 0)
+            x1 = x_cuts[col + 1] - (trim if col < COLS - 1 else 0)
+            y0 = y_cuts[row] + (trim if row > 0 else 0)
+            y1 = y_cuts[row + 1] - (trim if row < ROWS - 1 else 0)
+            if x1 <= x0 or y1 <= y0:
+                x0 = x_cuts[col]
+                x1 = x_cuts[col + 1]
+                y0 = y_cuts[row]
+                y1 = y_cuts[row + 1]
             cell = img.crop((x0, y0, x1, y1))
             buf = io.BytesIO()
             cell.save(buf, format="PNG")
@@ -777,6 +788,7 @@ def api_crop():
     image_b64: str = body.get("image_base64", "")
     x_cuts: list[int] = body.get("x_cuts", [])
     y_cuts: list[int] = body.get("y_cuts", [])
+    seam_trim: int = int(body.get("seam_trim", 0) or 0)
 
     if not image_b64:
         return jsonify({"error": "缺少 image_base64 字段"}), 400
@@ -788,10 +800,47 @@ def api_crop():
     try:
         img_bytes = base64.b64decode(image_b64)
         img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
-        slices = _crop_slices(img, [int(v) for v in x_cuts], [int(v) for v in y_cuts])
+        slices = _crop_slices(
+            img,
+            [int(v) for v in x_cuts],
+            [int(v) for v in y_cuts],
+            seam_trim=seam_trim,
+        )
         return jsonify({"slices": slices})
     except Exception as exc:
         return jsonify({"error": f"精确裁切失败: {exc}"}), 500
+
+
+MAX_ASSET_BYTES = 1 * 1024 * 1024  # 1 MB
+
+
+def _compress_image_to_limit(img_bytes: bytes, mime: str) -> tuple[bytes, str]:
+    """Compress image to stay under MAX_ASSET_BYTES. Returns (bytes, mime)."""
+    if len(img_bytes) <= MAX_ASSET_BYTES:
+        return img_bytes, mime
+
+    img = Image.open(io.BytesIO(img_bytes))
+    if img.mode == "RGBA":
+        img = img.convert("RGB")
+
+    # Try JPEG with progressively lower quality
+    for quality in (90, 80, 70, 60, 50):
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality, optimize=True)
+        if buf.tell() <= MAX_ASSET_BYTES:
+            return buf.getvalue(), "image/jpeg"
+
+    # Still too large — scale down dimensions
+    w, h = img.size
+    for scale in (0.8, 0.6, 0.5, 0.4, 0.3):
+        resized = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        buf = io.BytesIO()
+        resized.save(buf, format="JPEG", quality=75, optimize=True)
+        if buf.tell() <= MAX_ASSET_BYTES:
+            return buf.getvalue(), "image/jpeg"
+
+    # Last resort: return the smallest we got
+    return buf.getvalue(), "image/jpeg"
 
 
 @app.route("/api/download-zip", methods=["POST"])
@@ -828,16 +877,20 @@ def api_download_zip():
 
         # Banner
         if banner_b64:
+            raw = base64.b64decode(banner_b64)
+            compressed, out_mime = _compress_image_to_limit(raw, banner_mime)
             zf.writestr(
-                f"banner.{_image_ext_from_mime(banner_mime)}",
-                base64.b64decode(banner_b64),
+                f"banner.{_image_ext_from_mime(out_mime)}",
+                compressed,
             )
 
         # Logo
         if logo_b64:
+            raw = base64.b64decode(logo_b64)
+            compressed, out_mime = _compress_image_to_limit(raw, logo_mime)
             zf.writestr(
-                f"logo.{_image_ext_from_mime(logo_mime)}",
-                base64.b64decode(logo_b64),
+                f"logo.{_image_ext_from_mime(out_mime)}",
+                compressed,
             )
 
         # Info text
